@@ -1,0 +1,245 @@
+---
+title: "Sequence Evaluation"
+author: "Genomics Core Lab"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+#date: "June 30, 2017"
+params:
+  FH_readReport:
+    value: ""
+  FH_removedReport:
+    value: ""
+  prefix:
+    value: ""
+  sequenceDate: 
+    value: ""
+  fastq_header: 
+    value: ""
+  machineType: 
+    value: ""
+  chemistryType:
+    value: ""
+  outputDirectory: 
+    value: ""
+output:
+  html_document:
+    keep_md: yes
+    theme: flatly
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+library (knitr)
+library (ggplot2)
+library (reshape)
+source ("/media/Wapuilani/evan/repo/SequenceReportGenerator/IlluminaFastqInfo.R")
+
+# Contansts / Parameters
+TARGET = 1000
+
+# Lane Level
+#FH_readReport <- "/home/krell/Documents/SequenceReports/laneReport.csv"
+#prefix <- "Lane_Report"
+#sequenceDate <- "2017-03-15"
+#fastq_header <- "@K00291:43:HJFFCBBXX:7:1101:2260:1261 1:N:0:NATCAG"
+#machineType = "HiSeq4000"
+#outputDirectory = "/home/krell/Documents/SequenceReports/newfmt2/"
+
+FH_readReport <- params$FH_readReport
+FH_removedReport <- params$FH_removedReport
+prefix <- params$prefix
+sequenceDate <- params$sequenceDate
+fastq_header <- params$fastq_header
+machineType <- params$machineType
+outputDirectory <- params$outputDirectory
+
+#FH_readReport <- "/home/krell/Documents/SequenceReports/newfmt2/2017-03-15_OpihiPlate1Pool2_ReadReport.csv"
+#FH_removedReport <- "/home/krell/Documents/SequenceReports/newfmt2/2017-03-15_OpihiPlate1Pool2_RemovedReport.csv"
+#prefix <- "OpihiPlate1Pool2"
+#sequenceDate <- params$sequenceDate
+#fastq_header <- params$fastq_header
+#machineType <- params$machineType
+#outputDirectory <- params$outputDirectory
+
+#FH_readReport <- "/home/krell/Documents/SequenceReports/2017-05-09/HlobatusDemulLanes_ReadReport.csv"
+#FH_removedReport <- "/home/krell/Documents/SequenceReports/2017-05-09/2017-05-09_Hlobatus_1B_L1_RemovedReport.csv"
+#prefix <- "Sekong_Hlobatus_Demultiplexed"
+#sequenceDate <- "2017-05-09"
+#fastq_header <- "@K00291:43:HJFFCBBXX:7:1101:2260:1261 1:N:0:NATCAG"
+#machineType <- "HiSeq4000"
+#outputDirectory <- "/home/krell/Documents/SequenceReports/2017-05-09/Reports/"
+
+#FH_readReport <- "/media/Wapuilani/evan/repo/SequenceReportGenerator/test/FDA-Buffalo-Hiseq1_ReadReport.csv"
+#FH_removedReport <- "/media/Wapuilani/evan/repo/SequenceReportGenerator/test/FDA-Buffalo-Hiseq1_RemovedReport.csv"
+#prefix <- "FDA-Buffalo-Hiseq1"
+#sequenceDate <- "????-??-??"
+#fastq_header <- "@K00291:43:HJFFCBBXX:7:1101:2260:1261 1:N:0:NATCAG"
+#outputDirectory <- "/media/Wapuilani/evan/repo/SequenceReportGenerator/test/out/"
+#machineType <- "HiSeq4000"
+
+
+# Ensure all required parameters are present
+if (FH_readReport == "" || prefix == "" || sequenceDate == "" || fastq_header == "" || outputDirectory == "" ){
+  print ("Missing non-optional parameters")
+  stop()
+}
+
+```
+
+## `r prefix`
+
+```{r overview, echo = FALSE}
+fastqTbl <- getFASTQtable(fastq_header)
+if (is.null (machineType)) {
+  machineType <- getMachineType(fastqTbl$InstrumentName)
+}
+chemistryType <- getChemistryType(fastqTbl$FlowcellID)
+facilityTbl <- cbind.data.frame(sequenceDate, machineType, chemistryType) #, fastqTbl$Lane)
+colnames (facilityTbl) <- c ("Date", "Machine Type", "Chemistry Type") #, "Lane")
+kable (facilityTbl, caption = "Facility Summary")
+```
+
+```{r numreads, echo = FALSE}
+# Load ReadReport
+numReads <- read.csv(file = FH_readReport, header = TRUE, stringsAsFactors = FALSE)
+numReads <- numReads[order (numReads$NumReads), ]
+
+# Check if NumPhixReads is present.
+# If it is not, then the NumReadsGood is the same as NumReads
+if ("NumReadsPhix" %in% colnames (numReads) == FALSE ) {
+  numReads$NumReadsGood <- numReads$NumReads
+}
+
+
+# Calculate stats
+total <- sum (numReads$NumReads)
+totalGood <- sum (numReads$NumReadsGood)
+mean <- mean (numReads$NumReads)
+median <- median (numReads$NumReads)
+sd <- sd (numReads$NumReads)
+meanOverMedian <- mean / median
+coefficientOfVariation <- sd / mean
+
+minGoodRead <- min (numReads$NumReadsGood)
+maxGoodRead <- max (numReads$NumReadsGood)
+readRange_ordersOfMagnitude <- log10 (maxGoodRead) - log10 (minGoodRead)
+
+numIndividuals = length (numReads$NumReadsGood)
+numIndividualsLessTarget = length (which (numReads$NumReadsGood < TARGET))
+numIndividualsLess75PercentTarget = length (which (numReads$NumReadsGood < (.75) * TARGET))
+
+# Build and print tables
+stats <- cbind.data.frame (total, totalGood, mean, sd, median, meanOverMedian, coefficientOfVariation, minGoodRead, maxGoodRead, readRange_ordersOfMagnitude)
+colnames (stats) = c ("Total Reads", "Total Non-Phix", "Mean", "SD", "Median", "Mean/Median", "Cv", "Min Good Read", "Max Good Read", "Range (Orders of Magnitude)")
+kable (stats, caption = "Reads Summary")
+
+# Save tables
+if (sub('.*(?=.$)', '', outputDirectory, perl=T) == "/") {
+   path <- paste (outputDirectory, sequenceDate, sep = "")
+} else {
+  path <- paste (outputDirectory, sequenceDate, sep = "/")
+}
+
+filePrefix <- paste (path, prefix, sep = "_")
+# Read Stats
+fileName_ReadStats <- paste (filePrefix, "ReadStats.csv", sep = "_")
+write.csv (file = fileName_ReadStats, x = stats, quote = FALSE, row.names = FALSE)
+
+
+if ( "NumReadsPhix" %in% colnames (numReads) ) {
+  # Calculate Phix stats
+  totalPhix <- sum (numReads$NumReadsPhix)
+  percentPhix <- (totalPhix / total) * 100
+  meanPhix <- mean (numReads$NumReadsPhix)
+  medianPhix <- median (numReads$NumReadsPhix)
+  sdPhix <- sd (numReads$NumReadsPhix)
+  meanOverMedianPhix <- meanPhix / medianPhix
+  coefficientOfVariationPhix <- sdPhix / meanPhix
+  
+  statsPhix <- cbind.data.frame (totalPhix, percentPhix, meanPhix, sdPhix, medianPhix, meanOverMedianPhix, coefficientOfVariationPhix)
+  colnames (statsPhix) = c ("Total Phix", "Percent Phix", "Mean Phix", "SD Phix", "Median Phix", "Mean/Median Phix", "Cv Phix")
+  kable (statsPhix, caption = "Phix Summary")
+  
+  # PhiX Stats
+  fileName_PhixStats <- paste (filePrefix, "PhixStats.csv", sep = "_")
+  write.csv (file = fileName_PhixStats, x = statsPhix, quote = FALSE, row.names = FALSE)
+}
+
+# Load and print the RemovedReport, if available
+if (FH_removedReport != "") {
+  # Load RemovedReport
+  remReads <- read.csv(file = FH_removedReport, header = TRUE, stringsAsFactors = FALSE)
+
+  # Display Removed Report
+  kable (remReads, caption = "Removed Reads Summary")
+}
+
+# Display read table
+kable (numReads, caption = "Sequence Read Summary")
+
+```
+
+
+```{r nRead plots, echo = FALSE}
+
+if ("NumReadsPhix" %in% colnames (numReads)) {
+  numReads_to_melt <- cbind.data.frame (numReads$Library, numReads$NumReads, numReads$NumReadsPhix)
+} else {
+  numReads_to_melt <- cbind.data.frame (numReads$Library, numReads$NumReads)
+}
+colnames (numReads_to_melt) <- c ("Library", "NumReads", "NumReadsPhix")
+
+numReads_melted <- melt (data = numReads_to_melt, id.vars = "Library")
+numReads_melted[numReads_melted$variable == "NumReads", ]$value <- numReads_melted[numReads_melted$variable == "NumReads", ]$value
+if ("NumReadsPhix" %in% colnames (numReads)) {
+  numReads_melted[numReads_melted$variable == "NumReadsPhix", ]$value <- numReads_melted[numReads_melted$variable == "NumReadsPhix", ]$value
+}
+
+
+colnames (numReads_melted) = c ("Library", "Variable", "NumReads")
+ggplot (data = numReads_melted, aes (x = factor(Library, levels=unique(Library)), y = NumReads, fill = Variable)) + geom_bar (stat="identity", width=.5, position = "dodge") + 
+  scale_fill_manual(values=c("darkseagreen4", "red4"), labels = c ("Total", "Phix")) +
+  ylab ("Number of Reads") + theme(axis.text.x = element_text(angle = 90)) +
+  ggtitle ("Number of Reads Per Library") + xlab ("Library")
+
+colnames (numReads_melted) = c ("Library", "Variable", "NumReads")
+ggplot (data = numReads_melted, aes (x = factor(Library, levels=unique(Library)), y = log10(NumReads), fill = Variable)) + geom_bar (stat="identity", width=.5, position = "dodge") + 
+  scale_fill_manual(values=c("darkseagreen4", "red4"), labels = c ("Total", "Phix")) +
+  ylab ("Number of Reads") + theme(axis.text.x = element_text(angle = 90)) +
+  ggtitle ("Number of Reads Per Library - log base 10 scale") + xlab ("Library")
+
+# 
+# suppressMessages(numReads_melted <- melt (data = numReads_to_melt))
+# colnames (numReads_melted) = c ("Library", "Variable", "NumReads")
+# ggplot (data = numReads_melted, aes (x = factor(Library, levels=unique(Library)), y = NumReads, fill = Variable)) + geom_bar (stat="identity", width=.5, position = "dodge") + 
+#   scale_fill_manual(values=c("darkseagreen4", "red4"), labels = c ("Without phiX", "With phiX")) +
+#   ylab ("Number of Reads") + theme(axis.text.x = element_text(angle = 90)) +
+#   ggtitle ("Number of Reads Per Library") + xlab ("Library")
+# 
+# suppressMessages(numReads_melted <- melt (data = numReads_to_melt))
+# colnames (numReads_melted) = c ("Library", "Variable", "NumReads")
+# numReads_melted$NumReads <- log10 (numReads_melted$NumReads)
+# numReads_melted$NumReads[is.infinite(numReads_melted$NumReads)] <- 0
+# ggplot (data = numReads_melted, aes (x = factor(Library, levels=unique(Library)), y = NumReads, fill = Variable)) + geom_bar (stat="identity", width=.5, position = "dodge") + 
+#   scale_fill_manual(values=c("darkseagreen4", "red4"), labels = c ("Without phiX", "With phiX")) +
+#   ylab ("Number of Reads") + theme(axis.text.x = element_text(angle = 90)) +
+#   ggtitle ("Number of Reads Per Library - log base 10 scale") + xlab ("Library")
+
+if ("Difference" %in% colnames (numReads)) {
+  ggplot (data=numReads, aes(x=factor(Library, levels=unique(Library)), 
+    y=Difference)) + geom_point(stat="identity", col='indianred4') + 
+    ylab("Difference between observed and target") + 
+    xlab("Pools") + theme(axis.text.x = element_text(angle = 90)) + 
+    geom_hline(mapping = NULL, data = NULL, yintercept = 0, na.rm = FALSE,
+    show.legend = NA) + ggtitle ("Read Proportion Differences")
+}
+  
+ggplot (data = numReads, 
+  aes(x=NumReads)) + stat_bin(bins = 8, fill = 'cadetblue4', col = 'coral3') + 
+  ggtitle("Libraries") + xlab("Reads") + ylab("Number of Libraries")
+
+
+```

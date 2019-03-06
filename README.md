@@ -12,11 +12,28 @@ Quanitites of Phix can be supplied to compare the reads obtained to the [Phix](h
 
 **Download**
 
-	git clone git@gitlab.com:evankrell/SequenceReportGenerator.git
+	git clone https://github.com/cbirdlab/SequenceReportGenerator.git
 
 **Required R packages**
 
 	knitr, rmarkdown, pandoc, optparse, stringr
+
+**Fix hard-coded paths**
+Yes, I need to find a way that it will use relative paths.
+Or at least supply an install script to automate this. 
+
+Find this line in __SequenceReportGenerator/SequenceReportWrapper.R__:
+
+        rmarkdown::render("/media/Wapuilani/evan/repo/SequenceReportGenerator/SequenceReportGenerator.Rmd",
+
+And change the path to your own location to __SequenceReportGenerator/SequenceReportGenerator.Rmd__.
+
+Find this line in __SequenceReportGenerator/SequenceReportGenerator.Rmd__:
+
+        source ("/media/Wapuilani/evan/repo/SequenceReportGenerator/IlluminaFastqInfo.R")
+
+And change the path to your own location to __SequenceReportGenerator/IlluminaFastqInfo.R__. 
+
 
 ### How to run:
 

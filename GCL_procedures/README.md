@@ -19,7 +19,7 @@ The current version of this repository is stored on the TAMUCC HPC in:
 
 	```
 	bash /work/hobi/GCL/scripts/SequenceReportGenerator/GCL_procedures/buildReadReport.sh \
-		<yyyymmdd>_<ProjectName> <path to NumTotalReads.txt> <path to NumPhixReads.txt> <path to demultiplex file>
+		<yyyymmdd>_<ProjectName> <path to NumTotalReads.txt> <path to NumPhixReads.txt> <path to demultiplex (barcodes) file>
 	```
 
 4. Generate the RemovedReport csv:
